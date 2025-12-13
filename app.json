@@ -1,0 +1,8 @@
+{
+  "expo": {
+    "name": "Bible Trivia Game",
+    "slug": "bible-trivia-game", 
+    "version": "1.0.0",
+    "platforms": ["ios", "android", "web"]
+  }
+}

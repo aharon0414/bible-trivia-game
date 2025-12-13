@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables (IMPORTANT!)
+.env
+.env.local
+
+# Expo
+.expo/
+dist/
+web-build/
+.metro-cache/
+
+# Logs
+*.log
+npm-debug.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
