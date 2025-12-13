@@ -1,12 +1,13 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import TestScreen from './src/screens/TestScreen';
+import { AuthProvider } from './src/contexts/AuthContext';
+import RootNavigator from './src/navigation/RootNavigator';
 
 export default function App() {
   return (
-    <>
+    <AuthProvider>
       <StatusBar style="auto" />
-      <TestScreen />
-    </>
+      <RootNavigator />
+    </AuthProvider>
   );
 }
