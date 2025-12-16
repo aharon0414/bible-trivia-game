@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useEnvironment } from '../contexts/EnvironmentContext';
 
 interface LoginScreenProps {
   navigation: any;
@@ -21,6 +22,18 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
+  
+  // Get environment context (must be called unconditionally - hooks rule)
+  const { environment, isDevelopment, setEnvironment, isLoading: envLoading } = useEnvironment();
+
+  // Debug: Log environment state on mount and changes
+  useEffect(() => {
+    console.log('LoginScreen - Environment state:', {
+      environment,
+      isDevelopment,
+      isLoading: envLoading,
+    });
+  }, [environment, isDevelopment, envLoading]);
 
   async function handleLogin() {
     if (!email || !password) {
@@ -47,6 +60,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
       >
         <View style={styles.header}>
           <Text style={styles.headerIcon}>📖</Text>
@@ -114,6 +128,35 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           >
             <Text style={styles.secondaryButtonText}>Create New Account</Text>
           </TouchableOpacity>
+
+          {/* Environment Toggle Section - Always visible */}
+          <View style={styles.environmentSection}>
+            <Text style={styles.environmentLabel}>
+              Environment: {isDevelopment ? '🔧 DEV' : '🚀 PROD'}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.environmentToggle,
+                isDevelopment ? styles.environmentToggleDev : styles.environmentToggleProd
+              ]}
+              onPress={async () => {
+                try {
+                  const newEnv = isDevelopment ? 'production' : 'development';
+                  console.log('Switching environment from', environment, 'to', newEnv);
+                  await setEnvironment(newEnv);
+                  console.log('Environment switched successfully');
+                } catch (error) {
+                  console.error('Failed to switch environment:', error);
+                  Alert.alert('Error', 'Failed to switch environment. Please try again.');
+                }
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.environmentToggleText}>
+                Switch to {isDevelopment ? 'PROD' : 'DEV'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -129,6 +172,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+    paddingBottom: 40, // Extra padding to ensure environment section is visible
   },
   header: {
     alignItems: 'center',
@@ -219,6 +263,40 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: '#4A90E2',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  environmentSection: {
+    marginTop: 32,
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+    alignItems: 'center',
+    width: '100%',
+  },
+  environmentLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 12,
+  },
+  environmentToggle: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    minWidth: 150,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  environmentToggleDev: {
+    backgroundColor: '#FFA500',
+  },
+  environmentToggleProd: {
+    backgroundColor: '#28A745',
+  },
+  environmentToggleText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

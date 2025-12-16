@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { UserStats, CategoryStats, DifficultyStats, Difficulty } from '../types/database';
+import { environmentManager } from '../config/environment';
 
 export interface LeaderboardEntry {
   user_id: string;
@@ -115,8 +116,9 @@ class UserStatsService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       let query = supabase
-        .from('category_stats')
+        .from(tables.categoryStats)
         .select('*')
         .eq('user_id', userId);
 
@@ -149,9 +151,10 @@ class UserStatsService {
     }
   ): Promise<{ error: Error | null }> {
     try {
+      const tables = environmentManager.getTables();
       // Try to get existing category stats
       const { data: existingStats, error: fetchError } = await supabase
-        .from('category_stats')
+        .from(tables.categoryStats)
         .select('*')
         .eq('user_id', userId)
         .eq('category_id', categoryId)
@@ -166,7 +169,7 @@ class UserStatsService {
         const newAverageScore = ((existingStats.average_score * existingStats.games_played) + sessionStats.score) / newGamesPlayed;
 
         const { error: updateError } = await supabase
-          .from('category_stats')
+          .from(tables.categoryStats)
           .update({
             games_played: newGamesPlayed,
             questions_answered: newQuestionsAnswered,
@@ -181,7 +184,7 @@ class UserStatsService {
       } else {
         // Create new stats
         const { error: createError } = await supabase
-          .from('category_stats')
+          .from(tables.categoryStats)
           .insert({
             user_id: userId,
             category_id: categoryId,

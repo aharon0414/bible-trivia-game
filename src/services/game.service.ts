@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { GameSession, GameAnswer, Difficulty } from '../types/database';
+import { environmentManager } from '../config/environment';
 
 export interface CreateGameSessionData {
   userId: string;
@@ -29,8 +30,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: session, error } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .insert({
           user_id: data.userId,
           category_id: data.categoryId,
@@ -61,9 +63,10 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       // Insert the answer
       const { data: answer, error: answerError } = await supabase
-        .from('game_answers')
+        .from(tables.gameAnswers)
         .insert({
           session_id: data.sessionId,
           question_id: data.questionId,
@@ -82,7 +85,7 @@ class GameService {
       // Update session score if answer is correct
       if (data.isCorrect) {
         const { error: updateError } = await supabase
-          .from('game_sessions')
+          .from(tables.gamesSessions)
           .update({
             score: supabase.rpc('increment', { row_id: data.sessionId }),
           })
@@ -107,8 +110,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: session, error } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .update({
           is_completed: true,
           completed_at: new Date().toISOString(),
@@ -135,8 +139,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: session, error } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .select('*')
         .eq('id', sessionId)
         .single();
@@ -159,8 +164,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: session, error: sessionError } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .select('*')
         .eq('id', sessionId)
         .single();
@@ -170,7 +176,7 @@ class GameService {
       }
 
       const { data: answers, error: answersError } = await supabase
-        .from('game_answers')
+        .from(tables.gameAnswers)
         .select('*')
         .eq('session_id', sessionId)
         .order('answered_at', { ascending: true });
@@ -199,8 +205,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: sessions, error } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .select('*')
         .eq('user_id', userId)
         .order('started_at', { ascending: false })
@@ -224,8 +231,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: session, error } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .select('*')
         .eq('user_id', userId)
         .eq('is_completed', false)
@@ -252,8 +260,9 @@ class GameService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: answers, error } = await supabase
-        .from('game_answers')
+        .from(tables.gameAnswers)
         .select('*')
         .eq('session_id', sessionId)
         .order('answered_at', { ascending: true });
@@ -273,8 +282,9 @@ class GameService {
    */
   async deleteSession(sessionId: string): Promise<{ error: Error | null }> {
     try {
+      const tables = environmentManager.getTables();
       const { error } = await supabase
-        .from('game_sessions')
+        .from(tables.gamesSessions)
         .delete()
         .eq('id', sessionId);
 

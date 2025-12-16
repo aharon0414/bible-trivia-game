@@ -6,6 +6,12 @@ export interface Category {
   name: string;
   description: string | null;
   sort_order: number;
+  theme?: string | null;
+  biblical_period?: string | null;
+  learning_objective?: string | null;
+  difficulty_range?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Question {
@@ -20,6 +26,15 @@ export interface Question {
   option_c: string | null;
   option_d: string | null;
   bible_reference: string | null;
+  explanation: string | null;
+  teaching_notes?: string | null; // Deeper educational content
+  tags?: string[] | null; // Flexible categorization tags
+  ready_for_prod?: boolean; // Flag for migration to production
+  is_active?: boolean; // Whether question is active
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  times_answered?: number; // Track usage statistics
 }
 
 export interface UserProfile {

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Question, Category, Difficulty, QuestionType } from '../types/database';
+import { environmentManager } from '../config/environment';
 
 export interface QuestionFilters {
   categoryId?: string;
@@ -21,8 +22,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: categories, error } = await supabase
-        .from('categories')
+        .from(tables.categories)
         .select('*')
         .order('sort_order', { ascending: true });
 
@@ -44,8 +46,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: category, error } = await supabase
-        .from('categories')
+        .from(tables.categories)
         .select('*')
         .eq('id', categoryId)
         .single();
@@ -71,8 +74,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       let query = supabase
-        .from('questions')
+        .from(tables.questions)
         .select('*');
 
       // Apply filters
@@ -121,8 +125,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: question, error } = await supabase
-        .from('questions')
+        .from(tables.questions)
         .select('*')
         .eq('id', questionId)
         .single();
@@ -145,11 +150,12 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data, error } = await supabase
-        .from('questions')
+        .from(tables.questions)
         .select(`
           *,
-          category:categories(*)
+          category:${tables.categories}(*)
         `)
         .eq('id', questionId)
         .single();
@@ -172,11 +178,12 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       let query = supabase
-        .from('questions')
+        .from(tables.questions)
         .select(`
           *,
-          category:categories(*)
+          category:${tables.categories}(*)
         `);
 
       // Apply filters
@@ -212,8 +219,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       let query = supabase
-        .from('questions')
+        .from(tables.questions)
         .select('*', { count: 'exact', head: true });
 
       // Apply filters
@@ -273,8 +281,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: questions, error } = await supabase
-        .from('questions')
+        .from(tables.questions)
         .select('*')
         .eq('category_id', categoryId)
         .limit(limit);
@@ -300,8 +309,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: questions, error } = await supabase
-        .from('questions')
+        .from(tables.questions)
         .select('*')
         .eq('difficulty', difficulty)
         .limit(limit);
@@ -324,8 +334,9 @@ class QuestionService {
     error: Error | null;
   }> {
     try {
+      const tables = environmentManager.getTables();
       const { data: questions, error } = await supabase
-        .from('questions')
+        .from(tables.questions)
         .select('*')
         .textSearch('question_text', searchTerm);
 
