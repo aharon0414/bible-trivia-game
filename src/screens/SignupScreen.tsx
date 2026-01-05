@@ -17,36 +17,62 @@ interface SignupScreenProps {
 }
 
 export default function SignupScreen({ navigation }: SignupScreenProps) {
+  console.log('🔴🔴🔴 SIGNUPSCREEN RENDERING 🔴🔴🔴');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp } = useAuth();
+  const authContext = useAuth();
+  const { signUp } = authContext;
+
+  console.log('[SignupScreen] Component rendered');
+  console.log('[SignupScreen] useAuth returned:', {
+    hasSignUp: !!signUp,
+    signUpType: typeof signUp,
+    isFunction: typeof signUp === 'function',
+    authContextKeys: Object.keys(authContext),
+  });
 
   async function handleSignup() {
+    console.log('[SignupScreen] handleSignup: Called');
+    console.log('[SignupScreen] handleSignup: Form values:', {
+      email,
+      passwordLength: password.length,
+      confirmPasswordLength: confirmPassword.length,
+    });
+
     if (!email || !password || !confirmPassword) {
+      console.log('[SignupScreen] handleSignup: Validation failed - empty fields');
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
+      console.log('[SignupScreen] handleSignup: Validation failed - passwords do not match');
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
+      console.log('[SignupScreen] handleSignup: Validation failed - password too short');
       Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
+    console.log('[SignupScreen] handleSignup: All validations passed, calling signUp...');
     setLoading(true);
     try {
+      console.log('[SignupScreen] handleSignup: About to call signUp with:', { email, passwordLength: password.length });
       await signUp(email, password);
+      console.log('[SignupScreen] handleSignup: signUp completed successfully');
       // Navigation will be handled automatically by auth state change
     } catch (error: any) {
+      console.error('[SignupScreen] handleSignup: signUp threw error:', error);
       Alert.alert('Signup Failed', error.message || 'Please try again');
     } finally {
       setLoading(false);
+      console.log('[SignupScreen] handleSignup: Finished, loading set to false');
     }
   }
 
@@ -110,7 +136,10 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSignup}
+            onPress={() => {
+              console.log('🔵🔵🔵 BUTTON PRESSED 🔵🔵🔵');
+              handleSignup();
+            }}
             disabled={loading}
           >
             <Text style={styles.buttonText}>

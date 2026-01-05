@@ -24,6 +24,13 @@ class AuthService {
    */
   async signUp({ email, password, displayName }: SignUpData): Promise<AuthResponse> {
     try {
+      console.log('[AuthService] signUp: Called with email:', email);
+      console.log('[AuthService] signUp: Supabase client initialized:', {
+        hasSupabase: !!supabase,
+        hasAuth: !!supabase?.auth,
+      });
+      console.log('[AuthService] signUp: About to call supabase.auth.signUp...');
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -34,10 +41,28 @@ class AuthService {
         },
       });
 
+      console.log('[AuthService] signUp: Supabase response received:', {
+        hasData: !!data,
+        hasUser: !!data?.user,
+        userEmail: data?.user?.email,
+        userId: data?.user?.id,
+        hasSession: !!data?.session,
+        hasError: !!error,
+        errorName: error?.name,
+        errorMessage: error?.message,
+        errorStatus: error?.status,
+      });
+
       if (error) {
+        console.error('[AuthService] signUp: Supabase returned error:', {
+          name: error.name,
+          message: error.message,
+          status: error.status,
+        });
         return { user: null, session: null, error };
       }
 
+      console.log('[AuthService] signUp: Success! User created:', data.user?.id);
       // If email confirmation is required, user will be null until confirmed
       return {
         user: data.user,
@@ -45,6 +70,7 @@ class AuthService {
         error: null,
       };
     } catch (err) {
+      console.error('[AuthService] signUp: Exception caught:', err);
       return {
         user: null,
         session: null,

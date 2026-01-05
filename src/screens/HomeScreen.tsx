@@ -1,9 +1,10 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../navigation/MainNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { useEnvironment } from '../contexts/EnvironmentContext';
+import { supabase } from '../services/supabase';
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<MainStackParamList, 'Home'>;
@@ -12,6 +13,8 @@ type HomeScreenProps = {
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { user, signOut } = useAuth();
   const { isDevelopment, setEnvironment, environment } = useEnvironment();
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   const handleStartGame = () => {
     navigation.navigate('Difficulty');
@@ -29,6 +32,40 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     const newEnv = isDevelopment ? 'production' : 'development';
     await setEnvironment(newEnv);
   };
+
+  // Fetch user profile to get role
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (!user?.id) {
+        setLoadingProfile(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user profile:', error);
+          setUserRole(null);
+        } else {
+          setUserRole(data?.role || null);
+        }
+      } catch (err) {
+        console.error('Exception fetching user profile:', err);
+        setUserRole(null);
+      } finally {
+        setLoadingProfile(false);
+      }
+    }
+
+    fetchUserProfile();
+  }, [user?.id]);
+
+  const isAdmin = userRole === 'admin';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
@@ -62,8 +99,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         </TouchableOpacity>
       </View>
 
-      {/* Dev Tools Section */}
-      <View style={styles.devToolsContainer}>
+      {/* Dev Tools Section - Only visible to admins */}
+      {!loadingProfile && isAdmin && (
+        <View style={styles.devToolsContainer}>
         <Text style={styles.devToolsTitle}>Content Management</Text>
         <Text style={styles.envBadge}>
           {environment.toUpperCase()} MODE
@@ -109,7 +147,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             </TouchableOpacity>
           </>
         )}
-      </View>
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.signOutButton}

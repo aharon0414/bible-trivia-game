@@ -15,6 +15,7 @@ import { MainStackParamList } from '../navigation/MainNavigator';
 import { questionAdminService } from '../services/question-admin.service';
 import { migrationService } from '../services/migration.service';
 import { useEnvironment } from '../contexts/EnvironmentContext';
+import EditQuestionModal from '../components/EditQuestionModal';
 import type { Question, Difficulty } from '../types/database';
 
 type QuestionReviewScreenProps = {
@@ -33,7 +34,7 @@ export default function QuestionReviewScreen({ navigation, route }: QuestionRevi
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [filter, setFilter] = useState<{ difficulty?: Difficulty; active?: boolean }>({});
-  const [editingQuestion, setEditingQuestion] = useState<QuestionReview | null>(null);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   
   const targetQuestionId = route?.params?.questionId;
   const editMode = route?.params?.editMode;
@@ -171,7 +172,15 @@ export default function QuestionReviewScreen({ navigation, route }: QuestionRevi
   };
 
   const handleEdit = (questionId: string) => {
-    navigation.navigate('QuestionEdit', { questionId });
+    const question = questions.find(q => q.id === questionId);
+    if (question) {
+      setEditingQuestion(question);
+    }
+  };
+
+  const handleEditSave = () => {
+    loadQuestions();
+    loadStats();
   };
 
   const handleFlagForProd = async (questionId: string) => {
@@ -492,6 +501,16 @@ export default function QuestionReviewScreen({ navigation, route }: QuestionRevi
           ))
         )}
       </View>
+
+      {/* Edit Question Modal - Only show in development mode */}
+      {isDevelopment && (
+        <EditQuestionModal
+          visible={!!editingQuestion}
+          question={editingQuestion}
+          onClose={() => setEditingQuestion(null)}
+          onSave={handleEditSave}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -793,3 +812,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+
+
