@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,63 +17,133 @@ interface SignupScreenProps {
   navigation: any;
 }
 
-export default function SignupScreen({ navigation }: SignupScreenProps) {
-  console.log('🔴🔴🔴 SIGNUPSCREEN RENDERING 🔴🔴🔴');
+/**
+ * Maps Supabase auth errors to user-friendly messages
+ */
+function getFriendlyErrorMessage(error: any): string {
+  if (!error) return 'An unexpected error occurred';
   
+  const errorMessage = error.message || error.toString() || '';
+  const lowerMessage = errorMessage.toLowerCase();
+
+  // Check for specific error patterns
+  if (lowerMessage.includes('already registered') || 
+      lowerMessage.includes('user already registered') ||
+      lowerMessage.includes('email address is already registered')) {
+    return 'This email is already registered. Try logging in instead.';
+  }
+
+  if (lowerMessage.includes('user already exists')) {
+    return 'This email is already registered. Try logging in instead.';
+  }
+
+  if (lowerMessage.includes('password too short') ||
+      lowerMessage.includes('password should be at least')) {
+    return 'Password must be at least 6 characters';
+  }
+
+  if (lowerMessage.includes('invalid email') ||
+      lowerMessage.includes('email format')) {
+    return 'Please enter a valid email address';
+  }
+
+  if (lowerMessage.includes('network') ||
+      lowerMessage.includes('connection') ||
+      lowerMessage.includes('fetch') ||
+      lowerMessage.includes('timeout')) {
+    return 'Connection error. Please check your internet';
+  }
+
+  if (lowerMessage.includes('too many requests') ||
+      lowerMessage.includes('rate limit')) {
+    return 'Too many attempts. Please try again in a few minutes';
+  }
+
+  // Return original message if no pattern matches
+  return errorMessage || 'An error occurred. Please try again';
+}
+
+export default function SignupScreen({ navigation }: SignupScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const authContext = useAuth();
   const { signUp } = authContext;
 
-  console.log('[SignupScreen] Component rendered');
-  console.log('[SignupScreen] useAuth returned:', {
-    hasSignUp: !!signUp,
-    signUpType: typeof signUp,
-    isFunction: typeof signUp === 'function',
-    authContextKeys: Object.keys(authContext),
-  });
+  // Clear error when user starts typing
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (authError) {
+      setAuthError(null);
+    }
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    if (authError) {
+      setAuthError(null);
+    }
+  };
+
+  const handleConfirmPasswordChange = (text: string) => {
+    setConfirmPassword(text);
+    if (authError) {
+      setAuthError(null);
+    }
+  };
 
   async function handleSignup() {
-    console.log('[SignupScreen] handleSignup: Called');
-    console.log('[SignupScreen] handleSignup: Form values:', {
-      email,
-      passwordLength: password.length,
-      confirmPasswordLength: confirmPassword.length,
-    });
+    // Prevent double-submission
+    if (isLoading) {
+      return;
+    }
 
+    // Clear previous errors
+    setAuthError(null);
+
+    // Validate inputs
     if (!email || !password || !confirmPassword) {
-      console.log('[SignupScreen] handleSignup: Validation failed - empty fields');
-      Alert.alert('Error', 'Please fill in all fields');
+      setAuthError('Please fill in all fields');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setAuthError('Please enter a valid email address');
       return;
     }
 
     if (password !== confirmPassword) {
-      console.log('[SignupScreen] handleSignup: Validation failed - passwords do not match');
-      Alert.alert('Error', 'Passwords do not match');
+      setAuthError('Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
-      console.log('[SignupScreen] handleSignup: Validation failed - password too short');
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      setAuthError('Password must be at least 6 characters');
       return;
     }
 
-    console.log('[SignupScreen] handleSignup: All validations passed, calling signUp...');
-    setLoading(true);
+    setIsLoading(true);
+    
     try {
-      console.log('[SignupScreen] handleSignup: About to call signUp with:', { email, passwordLength: password.length });
+      // Call signUp through AuthContext - it will throw error if user already exists
       await signUp(email, password);
-      console.log('[SignupScreen] handleSignup: signUp completed successfully');
       // Navigation will be handled automatically by auth state change
+      // Clear form on success
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setAuthError(null);
     } catch (error: any) {
-      console.error('[SignupScreen] handleSignup: signUp threw error:', error);
-      Alert.alert('Signup Failed', error.message || 'Please try again');
+      const friendlyMessage = getFriendlyErrorMessage(error);
+      setAuthError(friendlyMessage);
     } finally {
-      setLoading(false);
-      console.log('[SignupScreen] handleSignup: Finished, loading set to false');
+      setIsLoading(false);
     }
   }
 
@@ -95,56 +166,101 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                authError && styles.inputError
+              ]}
               placeholder="Enter your email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={handleEmailChange}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
-              editable={!loading}
+              editable={!isLoading}
             />
           </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Create a password (min 6 characters)"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoComplete="password-new"
-              editable={!loading}
-            />
+            <View style={styles.passwordInputWrapper}>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.passwordInput,
+                  authError && styles.inputError
+                ]}
+                placeholder="Create a password (min 6 characters)"
+                value={password}
+                onChangeText={handlePasswordChange}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="password-new"
+                editable={!isLoading}
+              />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
+              >
+                <Text style={styles.passwordToggleIcon}>
+                  {showPassword ? '👁️‍🗨️' : '👁️'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Re-enter your password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoComplete="password-new"
-              editable={!loading}
-            />
+            <View style={styles.passwordInputWrapper}>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.passwordInput,
+                  authError && styles.inputError
+                ]}
+                placeholder="Re-enter your password"
+                value={confirmPassword}
+                onChangeText={handleConfirmPasswordChange}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+                autoComplete="password-new"
+                editable={!isLoading}
+              />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                disabled={isLoading}
+              >
+                <Text style={styles.passwordToggleIcon}>
+                  {showConfirmPassword ? '👁️‍🗨️' : '👁️'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {/* Error message display */}
+          {authError ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{authError}</Text>
+            </View>
+          ) : null}
+
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={() => {
-              console.log('🔵🔵🔵 BUTTON PRESSED 🔵🔵🔵');
-              handleSignup();
-            }}
-            disabled={loading}
+            style={[
+              styles.button,
+              (isLoading || !email || !password || !confirmPassword) && styles.buttonDisabled
+            ]}
+            onPress={handleSignup}
+            disabled={isLoading || !email || !password || !confirmPassword}
           >
-            <Text style={styles.buttonText}>
-              {loading ? 'Creating account...' : 'Sign Up'}
-            </Text>
+            {isLoading ? (
+              <View style={styles.buttonLoadingContainer}>
+                <ActivityIndicator size="small" color="#fff" style={styles.buttonSpinner} />
+                <Text style={styles.buttonText}>Creating account...</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>Sign Up</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.termsContainer}>
@@ -162,7 +278,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('Login')}
-            disabled={loading}
+            disabled={isLoading}
           >
             <Text style={styles.secondaryButtonText}>
               Already have an account? Sign In
@@ -224,15 +340,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  passwordInputWrapper: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 40,
+    zIndex: 1,
+  },
+  passwordToggleIcon: {
+    fontSize: 20,
+  },
+  inputError: {
+    borderColor: '#DC3545',
+    borderWidth: 1.5,
+  },
+  errorContainer: {
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FEB2B2',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: '#DC3545',
+    fontSize: 14,
+    textAlign: 'center',
+  },
   button: {
     backgroundColor: '#4A90E2',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     backgroundColor: '#B0C4DE',
+    opacity: 0.6,
+  },
+  buttonLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonSpinner: {
+    marginRight: 8,
   },
   buttonText: {
     color: '#fff',

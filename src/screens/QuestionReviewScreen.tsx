@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -32,6 +33,7 @@ export default function QuestionReviewScreen({ navigation, route }: QuestionRevi
   const [questions, setQuestions] = useState<QuestionReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [migrating, setMigrating] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [filter, setFilter] = useState<{ difficulty?: Difficulty; active?: boolean }>({});
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
@@ -205,36 +207,142 @@ export default function QuestionReviewScreen({ navigation, route }: QuestionRevi
     }
   };
 
-  const handleBatchMigrate = () => {
+  const handleBatchMigrate = async () => {
     const flaggedCount = questions.filter(q => q.ready_for_prod).length;
+    console.log('[QuestionReviewScreen] handleBatchMigrate called, flaggedCount:', flaggedCount);
+    console.log('[QuestionReviewScreen] Platform:', Platform.OS);
+    
     if (flaggedCount === 0) {
-      Alert.alert('No Questions', 'No questions are flagged for migration');
+      if (Platform.OS === 'web') {
+        window.alert('No questions are flagged for migration');
+      } else {
+        Alert.alert('No Questions', 'No questions are flagged for migration');
+      }
       return;
     }
 
-    Alert.alert(
-      'Batch Migrate?',
-      `Migrate ${flaggedCount} flagged question(s) to production?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Migrate',
-          onPress: async () => {
-            const result = await migrationService.batchMigrateFlaggedQuestions();
-            if (result.success) {
-              Alert.alert(
-                'Success',
-                `Migrated ${result.itemsMigrated} question(s) to production!`
-              );
-            } else {
-              Alert.alert('Error', result.message);
+    // Platform-specific confirmation
+    if (Platform.OS === 'web') {
+      // Use browser's native confirm dialog on web
+      console.log('[QuestionReviewScreen] Showing web confirmation dialog...');
+      const shouldProceed = window.confirm(
+        `Migrate ${flaggedCount} flagged question(s) to production?\n\nClick OK to proceed or Cancel to abort.`
+      );
+      console.log('[QuestionReviewScreen] Web confirmation result:', shouldProceed);
+      
+      if (shouldProceed) {
+        console.log('[QuestionReviewScreen] User confirmed migration on web, proceeding...');
+        executeBatchMigration(flaggedCount);
+      } else {
+        console.log('[QuestionReviewScreen] User cancelled migration on web');
+      }
+    } else {
+      // Use React Native Alert on iOS/Android
+      console.log('[QuestionReviewScreen] Showing native Alert confirmation...');
+      Alert.alert(
+        'Batch Migrate?',
+        `Migrate ${flaggedCount} flagged question(s) to production?`,
+        [
+          { 
+            text: 'Cancel', 
+            style: 'cancel',
+            onPress: () => {
+              console.log('[QuestionReviewScreen] Migration cancelled by user');
             }
-            loadQuestions();
-            loadStats();
           },
-        },
-      ]
-    );
+          {
+            text: 'Migrate',
+            onPress: () => {
+              console.log('[QuestionReviewScreen] User confirmed migration on native, proceeding...');
+              // Call the actual migration function
+              executeBatchMigration(flaggedCount);
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    }
+  };
+
+  const executeBatchMigration = async (expectedCount: number) => {
+    console.log('[QuestionReviewScreen] executeBatchMigration called, expectedCount:', expectedCount);
+    
+    // Set loading state
+    setMigrating(true);
+    
+    try {
+      console.log('[QuestionReviewScreen] About to call migrationService.batchMigrateFlaggedQuestions()...');
+      
+      // Actually call the migration service
+      const result = await migrationService.batchMigrateFlaggedQuestions();
+      
+      console.log('[QuestionReviewScreen] Migration service returned result:', {
+        success: result.success,
+        message: result.message,
+        itemsMigrated: result.itemsMigrated,
+        hasError: !!result.error,
+      });
+      
+      if (result.error) {
+        console.error('[QuestionReviewScreen] Migration error details:', {
+          message: result.error.message,
+          stack: result.error.stack,
+          error: result.error,
+        });
+      }
+      
+      // Reload data regardless of success/failure
+      await loadQuestions();
+      await loadStats();
+      
+      // Show result to user
+      if (result.success) {
+        Alert.alert(
+          'Success',
+          `Migrated ${result.itemsMigrated} question(s) to production!`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        const errorMessage = result.error 
+          ? `${result.message}\n\nError: ${result.error.message}`
+          : result.message;
+        
+        console.error('[QuestionReviewScreen] Migration failed - showing error alert');
+        Alert.alert(
+          'Migration Failed',
+          errorMessage,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
+      // Catch any unexpected errors that weren't caught by the service
+      console.error('[QuestionReviewScreen] EXCEPTION in executeBatchMigration:', error);
+      console.error('[QuestionReviewScreen] Exception stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('[QuestionReviewScreen] Exception details:', {
+        name: error?.name,
+        message: error?.message,
+        error: error,
+      });
+      
+      // Reload data even on error
+      try {
+        await loadQuestions();
+        await loadStats();
+      } catch (reloadError) {
+        console.error('[QuestionReviewScreen] Error reloading data after migration failure:', reloadError);
+      }
+      
+      // Show error to user
+      Alert.alert(
+        'Unexpected Error',
+        `Migration failed with an unexpected error:\n\n${error?.message || 'Unknown error'}\n\nCheck console for details.`,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      // Always clear loading state
+      setMigrating(false);
+      console.log('[QuestionReviewScreen] Migration process completed, loading state cleared');
+    }
   };
 
   if (!isDevelopment) {
@@ -270,12 +378,22 @@ export default function QuestionReviewScreen({ navigation, route }: QuestionRevi
         <Text style={styles.title}>Question Review</Text>
         <Text style={styles.subtitle}>Dev Environment Questions</Text>
         <TouchableOpacity
-          style={styles.batchMigrateButton}
+          style={[styles.batchMigrateButton, migrating && styles.batchMigrateButtonDisabled]}
           onPress={handleBatchMigrate}
+          disabled={migrating}
         >
-          <Text style={styles.batchMigrateButtonText}>
-            🚀 Migrate All Flagged ({questions.filter(q => q.ready_for_prod).length})
-          </Text>
+          {migrating ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.batchMigrateButtonText}>
+                Migrating...
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.batchMigrateButtonText}>
+              🚀 Migrate All Flagged ({questions.filter(q => q.ready_for_prod).length})
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -799,6 +917,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  batchMigrateButtonDisabled: {
+    opacity: 0.6,
   },
   batchMigrateButtonText: {
     color: '#fff',

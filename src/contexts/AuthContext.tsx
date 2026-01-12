@@ -159,19 +159,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(error.message || 'Failed to sign up');
       }
 
-      // If email confirmation is required, user might be null until confirmed
-      // In that case, we still want to show success but user won't be set yet
-      if (supabaseUser) {
-        console.log('[AuthContext] signUp: User created successfully, setting user state');
-        setUser(mapSupabaseUser(supabaseUser));
-      } else if (session?.user) {
+      // CRITICAL: Only set user state if there's a valid session
+      // If email confirmation is required, hasSession will be false
+      // Setting user state without a session causes RLS policy failures
+      if (session?.user) {
+        // Valid session exists - user is logged in and can access data
         console.log('[AuthContext] signUp: Session created, setting user from session');
         setUser(mapSupabaseUser(session.user));
+      } else if (supabaseUser && !session) {
+        // User created but no session (email confirmation required)
+        // Don't set user state - they need to verify email first
+        console.log('[AuthContext] signUp: User created but no session - email confirmation required');
+        console.log('[AuthContext] signUp: NOT setting user state (will cause RLS failures)');
+        throw new Error('Account created! Please check your email to verify your account before logging in.');
       } else {
-        // Email confirmation required - user will be set after they confirm
-        // For now, we'll throw an error to inform the user
-        console.warn('[AuthContext] signUp: No user or session returned - email confirmation may be required');
-        throw new Error('Please check your email to confirm your account');
+        // Edge case: No user or session returned
+        console.warn('[AuthContext] signUp: No user or session returned');
+        throw new Error('Sign up completed, but no user or session was returned. Please try logging in.');
       }
     } catch (error) {
       console.error('[AuthContext] signUp: Exception caught:', error);

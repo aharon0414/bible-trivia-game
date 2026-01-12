@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { MainStackParamList } from '../navigation/MainNavigator';
@@ -49,14 +49,21 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
   }, [timeRemaining, timerActive, showResult]);
 
-  // Reset timer when question changes
+  // Start/reset timer when question changes or when questions first load
   useEffect(() => {
-    if (currentQuestion && !showResult) {
+    // Only start timer if we have questions loaded, a current question, not showing result, and not loading
+    if (questions.length > 0 && currentQuestion && !showResult && !loading) {
       setTimeRemaining(30);
       setTimerActive(true);
       setActionTaken(false);
+      setSelectedAnswer(null);
+    } else {
+      // Stop timer if conditions aren't met
+      if (showResult || loading || !currentQuestion || questions.length === 0) {
+        setTimerActive(false);
+      }
     }
-  }, [currentQuestionIndex, currentQuestion]);
+  }, [currentQuestionIndex, questions.length, showResult, loading]);
 
   const handleTimeUp = () => {
     if (showResult) return; // Already handled
@@ -71,13 +78,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
     
     // Don't increment score (time ran out = wrong answer)
-    // In prod mode, auto-advance after delay
-    // In dev mode, require action before proceeding
-    if (!isDevelopment) {
-      setTimeout(() => {
-        proceedToNext();
-      }, 1500);
-    }
+    // No auto-advance - user must click "Next Question" button
   };
 
   const getQuestionCount = (difficulty: Difficulty): number => {
@@ -123,6 +124,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
       setQuestions(getMockQuestions(difficulty));
     } finally {
       setLoading(false);
+      // Timer will start automatically via useEffect when currentQuestion becomes available
     }
   };
 
@@ -210,7 +212,8 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     return result;
   };
 
-  const currentQuestion = questions[currentQuestionIndex];
+  // Get current question - computed from questions array
+  const currentQuestion = questions.length > 0 ? questions[currentQuestionIndex] : undefined;
 
   // Memoize shuffled answers to prevent re-shuffling on every render
   const [shuffledAnswers, setShuffledAnswers] = React.useState<string[]>([]);
@@ -267,13 +270,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
       setScore(score + 1);
     }
 
-    // Don't auto-advance in dev mode - require action
-    // In prod mode, auto-advance after delay
-    if (!isDevelopment) {
-      setTimeout(() => {
-        proceedToNext();
-      }, 1500);
-    }
+    // No auto-advance - user must click "Next Question" button
   };
 
   const handleMoveToProd = async () => {
@@ -282,8 +279,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
       if (result.success) {
         Alert.alert('Success', 'Question flagged for migration to production!');
         setActionTaken(true);
-        // Continue to next question
-        proceedToNext();
+        // Don't auto-advance - user clicks "Next Question" button when ready
       } else {
         Alert.alert('Error', result.message);
       }
@@ -336,19 +332,23 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   };
 
   const proceedToNext = () => {
+    // In dev mode, require action before proceeding
     if (isDevelopment && !actionTaken) {
-      Alert.alert('Action Required', 'Please take an action (Keep, Review, Edit, or Delete) before proceeding to the next question.');
+      Alert.alert('Action Required', 'Please take an action (Flag for Prod, Review, Edit, or Delete) before proceeding to the next question.');
       return;
     }
     
     setShowResult(false);
     setShowDevActions(false);
     setTimerActive(false);
+    setActionTaken(false); // Reset for next question
+    
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setSelectedAnswer(null);
       setTimeRemaining(30);
     } else {
+      // Navigate to results screen
       navigation.navigate('Results', {
         score,
         total: questions.length,
@@ -381,22 +381,33 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   }
 
   const handleQuitGame = () => {
-    // Show confirmation alert before quitting
-    Alert.alert(
-      'Quit Game?',
-      'Are you sure you want to quit? Your progress will be lost.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Quit',
-          style: 'destructive',
-          onPress: () => navigation.navigate('Home'),
-        },
-      ]
-    );
+    // Show confirmation dialog before quitting
+    const confirmMessage = 'Quit game? Progress will be lost.';
+    
+    if (Platform.OS === 'web') {
+      // Use window.confirm for web
+      const shouldQuit = window.confirm(confirmMessage);
+      if (shouldQuit) {
+        navigation.navigate('Home');
+      }
+    } else {
+      // Use Alert.alert for native
+      Alert.alert(
+        'Quit Game?',
+        confirmMessage,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Quit',
+            style: 'destructive',
+            onPress: () => navigation.navigate('Home'),
+          },
+        ]
+      );
+    }
   };
 
   return (
@@ -458,22 +469,66 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           })}
         </View>
 
-        {/* Show scripture reference and explanation after answer */}
+        {/* Show answer feedback, scripture reference and explanation after answer */}
         {showResult && (
-          <View style={styles.feedbackContainer}>
-            {currentQuestion.bible_reference && (
-              <View style={styles.referenceContainer}>
-                <Text style={styles.referenceLabel}>📖 Scripture Reference:</Text>
-                <Text style={styles.referenceText}>{currentQuestion.bible_reference}</Text>
-              </View>
-            )}
-            {currentQuestion.explanation && (
-              <View style={styles.explanationContainer}>
-                <Text style={styles.explanationLabel}>💡 Explanation:</Text>
-                <Text style={styles.explanationText}>{currentQuestion.explanation}</Text>
-              </View>
-            )}
-          </View>
+          <>
+            {/* Answer feedback - show if correct or incorrect */}
+            <View style={styles.answerFeedbackContainer}>
+              {selectedAnswer === currentQuestion.correct_answer ? (
+                <View style={[styles.feedbackBadge, styles.correctBadge]}>
+                  <Text style={styles.feedbackBadgeText}>✓ Correct!</Text>
+                </View>
+              ) : (
+                <View style={[styles.feedbackBadge, styles.incorrectBadge]}>
+                  <Text style={styles.feedbackBadgeText}>✗ Incorrect</Text>
+                </View>
+              )}
+              <Text style={styles.correctAnswerText}>
+                Correct answer: {currentQuestion.correct_answer}
+              </Text>
+            </View>
+
+            {/* Scripture reference and explanation */}
+            <View style={styles.feedbackContainer}>
+              {currentQuestion.bible_reference && (
+                <View style={styles.referenceContainer}>
+                  <Text style={styles.referenceLabel}>📖 Scripture Reference:</Text>
+                  <Text style={styles.referenceText}>{currentQuestion.bible_reference}</Text>
+                </View>
+              )}
+              {currentQuestion.explanation && (
+                <View style={styles.explanationContainer}>
+                  <Text style={styles.explanationLabel}>💡 Explanation:</Text>
+                  <Text style={styles.explanationText}>{currentQuestion.explanation}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Next Question / View Results button */}
+            <View style={styles.nextButtonContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.nextButton,
+                  isDevelopment && !actionTaken && styles.nextButtonDisabled
+                ]}
+                onPress={proceedToNext}
+                disabled={isDevelopment && !actionTaken}
+              >
+                <Text style={styles.nextButtonText}>
+                  {isDevelopment && !actionTaken 
+                    ? '⚠️ Action Required'
+                    : currentQuestionIndex < questions.length - 1 
+                      ? 'Next Question →' 
+                      : 'View Results →'}
+                </Text>
+              </TouchableOpacity>
+              {isDevelopment && !actionTaken && (
+                <Text style={styles.actionHintText}>
+                  Please take a dev action above before continuing
+                </Text>
+              )}
+            </View>
+          </>
         )}
 
         {/* Dev mode actions */}
@@ -506,18 +561,6 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
                 <Text style={styles.devActionText}>🗑️ Delete</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[
-                styles.continueButton,
-                !actionTaken && styles.continueButtonDisabled
-              ]}
-              onPress={proceedToNext}
-              disabled={!actionTaken}
-            >
-              <Text style={styles.continueButtonText}>
-                {actionTaken ? 'Continue to Next Question' : '⚠️ Action Required'}
-              </Text>
-            </TouchableOpacity>
             
             {!actionTaken && (
               <Text style={styles.actionRequiredText}>
@@ -722,6 +765,74 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#555',
     lineHeight: 22,
+  },
+  answerFeedbackContainer: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  feedbackBadge: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  correctBadge: {
+    backgroundColor: '#4CAF50',
+  },
+  incorrectBadge: {
+    backgroundColor: '#F44336',
+  },
+  feedbackBadgeText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  correctAnswerText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  nextButtonContainer: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  nextButton: {
+    backgroundColor: '#4A90E2',
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+    minHeight: 56,
+  },
+  nextButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
+  },
+  nextButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  actionHintText: {
+    color: '#666',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   devActionsContainer: {
     margin: 16,

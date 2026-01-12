@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useEnvironment } from '../contexts/EnvironmentContext';
@@ -17,10 +18,62 @@ interface LoginScreenProps {
   navigation: any;
 }
 
+/**
+ * Maps Supabase auth errors to user-friendly messages
+ */
+function getFriendlyErrorMessage(error: any): string {
+  if (!error) return 'An unexpected error occurred';
+  
+  const errorMessage = error.message || error.toString() || '';
+  const lowerMessage = errorMessage.toLowerCase();
+
+  // Check for specific error patterns
+  if (lowerMessage.includes('already registered') || 
+      lowerMessage.includes('user already registered') ||
+      lowerMessage.includes('email address is already registered')) {
+    return 'This email is already registered';
+  }
+
+  if (lowerMessage.includes('invalid login credentials') ||
+      lowerMessage.includes('invalid credentials') ||
+      lowerMessage.includes('email or password') ||
+      lowerMessage.includes('wrong password') ||
+      lowerMessage.includes('incorrect password')) {
+    return 'Invalid email or password';
+  }
+
+  if (lowerMessage.includes('password too short') ||
+      lowerMessage.includes('password should be at least')) {
+    return 'Password must be at least 6 characters';
+  }
+
+  if (lowerMessage.includes('network') ||
+      lowerMessage.includes('connection') ||
+      lowerMessage.includes('fetch') ||
+      lowerMessage.includes('timeout')) {
+    return 'Connection error. Please check your internet';
+  }
+
+  if (lowerMessage.includes('email not confirmed') ||
+      lowerMessage.includes('email not verified')) {
+    return 'Please verify your email before signing in';
+  }
+
+  if (lowerMessage.includes('too many requests') ||
+      lowerMessage.includes('rate limit')) {
+    return 'Too many attempts. Please try again in a few minutes';
+  }
+
+  // Return original message if no pattern matches, but make it more user-friendly
+  return errorMessage || 'An error occurred. Please try again';
+}
+
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const { signIn } = useAuth();
   
   // Get environment context (must be called unconditionally - hooks rule)
@@ -35,20 +88,57 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     });
   }, [environment, isDevelopment, envLoading]);
 
+  // Clear error when user starts typing
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (authError) {
+      setAuthError(null);
+    }
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    if (authError) {
+      setAuthError(null);
+    }
+  };
+
   async function handleLogin() {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    // Prevent double-submission
+    if (isLoading) {
       return;
     }
 
-    setLoading(true);
+    // Clear previous errors
+    setAuthError(null);
+
+    // Validate inputs
+    if (!email || !password) {
+      setAuthError('Please fill in all fields');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setAuthError('Please enter a valid email address');
+      return;
+    }
+
+    setIsLoading(true);
     try {
       await signIn(email, password);
       // Navigation will be handled automatically by auth state change
+      // Clear form on success
+      setEmail('');
+      setPassword('');
+      setAuthError(null);
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Please try again');
+      console.error('[LoginScreen] Login error:', error);
+      const friendlyMessage = getFriendlyErrorMessage(error);
+      setAuthError(friendlyMessage);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }
 
@@ -72,45 +162,78 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                authError && styles.inputError
+              ]}
               placeholder="Enter your email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={handleEmailChange}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
-              editable={!loading}
+              editable={!isLoading}
             />
           </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoComplete="password"
-              editable={!loading}
-            />
+            <View style={styles.passwordInputWrapper}>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.passwordInput,
+                  authError && styles.inputError
+                ]}
+                placeholder="Enter your password"
+                value={password}
+                onChangeText={handlePasswordChange}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="password"
+                editable={!isLoading}
+              />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
+              >
+                <Text style={styles.passwordToggleIcon}>
+                  {showPassword ? '👁️‍🗨️' : '👁️'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {/* Error message display */}
+          {authError && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{authError}</Text>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[
+              styles.button,
+              (isLoading || !email || !password) && styles.buttonDisabled
+            ]}
             onPress={handleLogin}
-            disabled={loading}
+            disabled={isLoading || !email || !password}
           >
-            <Text style={styles.buttonText}>
-              {loading ? 'Signing in...' : 'Sign In'}
-            </Text>
+            {isLoading ? (
+              <View style={styles.buttonLoadingContainer}>
+                <ActivityIndicator size="small" color="#fff" style={styles.buttonSpinner} />
+                <Text style={styles.buttonText}>Logging in...</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>Sign In</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.forgotPassword}
             onPress={() => Alert.alert('Forgot Password', 'This feature is coming soon!')}
-            disabled={loading}
+            disabled={isLoading}
           >
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
@@ -124,7 +247,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('Signup')}
-            disabled={loading}
+            disabled={isLoading}
           >
             <Text style={styles.secondaryButtonText}>Create New Account</Text>
           </TouchableOpacity>
@@ -150,7 +273,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                   Alert.alert('Error', 'Failed to switch environment. Please try again.');
                 }
               }}
-              disabled={loading}
+              disabled={isLoading}
             >
               <Text style={styles.environmentToggleText}>
                 Switch to {isDevelopment ? 'PROD' : 'DEV'}
@@ -214,15 +337,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  passwordInputWrapper: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 40,
+    zIndex: 1,
+  },
+  passwordToggleIcon: {
+    fontSize: 20,
+  },
+  inputError: {
+    borderColor: '#DC3545',
+    borderWidth: 1.5,
+  },
+  errorContainer: {
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FEB2B2',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: '#DC3545',
+    fontSize: 14,
+    textAlign: 'center',
+  },
   button: {
     backgroundColor: '#4A90E2',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     backgroundColor: '#B0C4DE',
+    opacity: 0.6,
+  },
+  buttonLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonSpinner: {
+    marginRight: 8,
   },
   buttonText: {
     color: '#fff',

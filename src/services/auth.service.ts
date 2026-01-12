@@ -59,16 +59,51 @@ class AuthService {
           message: error.message,
           status: error.status,
         });
+        
+        // Check if error is about existing user
+        const errorMessage = error.message || '';
+        const lowerMessage = errorMessage.toLowerCase();
+        
+        if (lowerMessage.includes('already registered') || 
+            lowerMessage.includes('user already registered') ||
+            lowerMessage.includes('email address is already registered') ||
+            lowerMessage.includes('user_already_exists') ||
+            error.name === 'UserAlreadyRegistered') {
+          // Supabase explicitly says user already exists
+          console.warn('[AuthService] signUp: Supabase confirmed existing user');
+          const existingUserError: AuthError = {
+            name: 'UserAlreadyRegistered',
+            message: 'This email is already registered. Try logging in instead.',
+            status: 400,
+          } as AuthError;
+          return { user: null, session: null, error: existingUserError };
+        }
+        
+        // Other errors from Supabase
         return { user: null, session: null, error };
       }
 
-      console.log('[AuthService] signUp: Success! User created:', data.user?.id);
-      // If email confirmation is required, user will be null until confirmed
-      return {
-        user: data.user,
-        session: data.session,
-        error: null,
-      };
+      // No error from Supabase - treat as success
+      // Note: hasSession can be false if email confirmation is required
+      // That's still a successful signup, just requires email confirmation
+      if (data?.user) {
+        console.log('[AuthService] signUp: Success! User created:', data.user.id);
+        console.log('[AuthService] signUp: Session:', data.session ? 'Present (auto-logged in)' : 'Not present (email confirmation may be required)');
+        return {
+          user: data.user,
+          session: data.session, // May be null if email confirmation required
+          error: null,
+        };
+      }
+
+      // Edge case: No user returned (shouldn't happen after successful signUp)
+      console.warn('[AuthService] signUp: Unexpected response - no user returned');
+      const unexpectedError: AuthError = {
+        name: 'UnexpectedResponse',
+        message: 'Sign up failed - unexpected response from server',
+        status: 500,
+      } as AuthError;
+      return { user: null, session: null, error: unexpectedError };
     } catch (err) {
       console.error('[AuthService] signUp: Exception caught:', err);
       return {
